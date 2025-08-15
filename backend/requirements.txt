@@ -1,0 +1,7 @@
+Flask==2.3.3
+Flask-CORS==4.0.0
+EbookLib==0.18
+BeautifulSoup4==4.12.2
+# lxml==4.9.3  # Not required for beautifulsoup4
+Werkzeug==2.3.7
+python-dotenv==1.0.0

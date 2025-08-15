@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Story Game - Dont Vous Êtes le Héros</title>
+    <link rel="stylesheet" href="src/css/styles.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Home Screen -->
+        <div id="home-screen" class="screen active">
+            <header class="header">
+                <h1>Interactive Story Game</h1>
+                <p class="subtitle">Importez vos livres EPUB et vivez l'aventure</p>
+                <button id="theme-toggle" class="theme-toggle" aria-label="Toggle dark mode">🌓</button>
+            </header>
+
+            <main class="main-content">
+                <!-- File Upload Section -->
+                <div class="upload-section">
+                    <div id="drop-zone" class="drop-zone">
+                        <div class="drop-zone-content">
+                            <div class="upload-icon">📚</div>
+                            <h2>Importez votre livre EPUB</h2>
+                            <p>Glissez-déposez votre fichier .epub ici ou cliquez pour sélectionner</p>
+                            <input type="file" id="file-input" accept=".epub" hidden>
+                            <button id="select-file-btn" class="btn btn-primary">Sélectionner un fichier</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Book Library Section -->
+                <div id="library-section" class="library-section">
+                    <h2>Votre bibliothèque</h2>
+                    <div id="book-list" class="book-list">
+                        <!-- Books will be populated here -->
+                    </div>
+                </div>
+
+                <!-- Loading Section -->
+                <div id="loading-section" class="loading-section hidden">
+                    <div class="loading-spinner"></div>
+                    <p id="loading-text">Chargement en cours...</p>
+                </div>
+            </main>
+        </div>
+
+        <!-- Game Screen -->
+        <div id="game-screen" class="screen">
+            <header class="game-header">
+                <button id="back-btn" class="btn btn-secondary">← Retour</button>
+                <h1 id="book-title">Titre du livre</h1>
+                <div class="game-controls">
+                    <button id="save-btn" class="btn btn-secondary">💾</button>
+                    <button id="game-theme-toggle" class="theme-toggle">🌓</button>
+                </div>
+            </header>
+
+            <main class="game-content">
+                <div id="story-container" class="story-container">
+                    <div id="story-text" class="story-text">
+                        <!-- Story content will be displayed here -->
+                    </div>
+                    
+                    <div id="choices-container" class="choices-container">
+                        <!-- Choices will be displayed here -->
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <!-- Error Modal -->
+        <div id="error-modal" class="modal hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Erreur</h3>
+                    <button id="close-error-modal" class="btn btn-close">×</button>
+                </div>
+                <div class="modal-body">
+                    <p id="error-message">Une erreur est survenue</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript -->
+    <script type="module" src="src/js/main.js"></script>
+</body>
+</html>
