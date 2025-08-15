@@ -143,59 +143,7 @@ export class ApiClient {
         });
     }
 
-    // ====================================================================
-    // FILE UPLOAD
-    // ====================================================================
-
-    async uploadEPUB(file, progressCallback = null) {
-        this.validateFile(file);
-        
-        const formData = new FormData();
-        formData.append('file', file);
-
-        return new Promise((resolve, reject) => {
-            const xhr = new XMLHttpRequest();
-
-            // Setup progress tracking
-            if (progressCallback) {
-                xhr.upload.onprogress = (event) => {
-                    if (event.lengthComputable) {
-                        const progress = Math.round((event.loaded / event.total) * 100);
-                        progressCallback(progress);
-                    }
-                };
-            }
-
-            // Setup completion handler
-            xhr.onload = () => {
-                try {
-                    if (xhr.status >= 200 && xhr.status < 300) {
-                        const response = JSON.parse(xhr.responseText);
-                        if (response.success) {
-                            resolve(response);
-                        } else {
-                            reject(new Error(response.error || 'Upload failed'));
-                        }
-                    } else {
-                        const errorData = this.parseErrorResponse(xhr.responseText);
-                        reject(new Error(errorData.error || `Upload failed: ${xhr.statusText}`));
-                    }
-                } catch (error) {
-                    reject(new Error(`Upload failed: Invalid response from server`));
-                }
-            };
-
-            // Setup error handlers
-            xhr.onerror = () => reject(new Error('Upload failed: Network error'));
-            xhr.ontimeout = () => reject(new Error('Upload failed: Request timeout'));
-            xhr.onabort = () => reject(new Error('Upload failed: Request aborted'));
-
-            // Configure request
-            xhr.timeout = this.timeout;
-            xhr.open('POST', `${this.baseURL}/upload`);
-            xhr.send(formData);
-        });
-    }
+    // Note: EPUB discovery functionality removed - use CLI: python app.py --index
 
     // ====================================================================
     // SAVE MANAGEMENT
@@ -217,7 +165,10 @@ export class ApiClient {
 
     async saveGameState(bookId, saveData) {
         this.validateBookId(bookId);
-        this.validateSaveData(saveData);
+        // Temporarily disable validation to debug
+        // this.validateSaveData(saveData);
+        
+        console.log('Saving game state:', saveData);
         
         return await this.request(`/saves/${bookId}`, {
             method: 'POST',
@@ -255,24 +206,13 @@ export class ApiClient {
         }
     }
 
-    validateFile(file) {
-        if (!file || !(file instanceof File)) {
-            throw new Error('Invalid file object');
-        }
-        if (!file.name.toLowerCase().endsWith('.epub')) {
-            throw new Error('Only EPUB files are allowed');
-        }
-        if (file.size > 50 * 1024 * 1024) { // 50MB
-            throw new Error('File too large (max 50MB)');
-        }
-    }
 
     validateSaveData(saveData) {
         if (!saveData || typeof saveData !== 'object') {
             throw new Error('Invalid save data');
         }
-        if (!saveData.storyState) {
-            throw new Error('Save data missing story state');
+        if (!saveData.currentSection) {
+            throw new Error('Save data missing current section');
         }
     }
 

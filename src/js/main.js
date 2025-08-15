@@ -18,6 +18,8 @@ class InteractiveStoryApp {
         this.currentBook = null;
         this.isLoading = false;
         this.isBackendAvailable = false;
+        this.navigationHistory = [];
+        this.debugPanelVisible = true;
         
         this.initialize();
     }
@@ -44,28 +46,17 @@ class InteractiveStoryApp {
     // ====================================================================
 
     setupEventListeners() {
-        // File upload
-        const fileInput = document.getElementById('file-input');
-        const selectFileBtn = document.getElementById('select-file-btn');
-        const dropZone = document.getElementById('drop-zone');
-
-        selectFileBtn?.addEventListener('click', () => fileInput?.click());
-        fileInput?.addEventListener('change', (e) => this.handleFileSelect(e));
-
-        // Drag and drop
-        dropZone?.addEventListener('dragover', this.handleDragOver.bind(this));
-        dropZone?.addEventListener('dragleave', this.handleDragLeave.bind(this));
-        dropZone?.addEventListener('drop', this.handleDrop.bind(this));
-
         // Navigation
         document.getElementById('back-btn')?.addEventListener('click', () => this.showHomeScreen());
 
-        // Theme toggles
-        document.getElementById('theme-toggle')?.addEventListener('click', () => this.ui.toggleTheme());
-        document.getElementById('game-theme-toggle')?.addEventListener('click', () => this.ui.toggleTheme());
-
         // Game controls
-        document.getElementById('save-btn')?.addEventListener('click', () => this.saveGame());
+        // Save button removed - auto-save is enabled
+        document.getElementById('reset-btn')?.addEventListener('click', () => this.resetGame());
+        
+        // Debug controls
+        document.getElementById('toggle-debug')?.addEventListener('click', () => this.toggleDebugPanel());
+        
+        // Note: Index EPUBs functionality removed - use CLI: python app.py --index
 
         // Modal controls
         document.getElementById('close-error-modal')?.addEventListener('click', () => this.hideErrorModal());
@@ -97,22 +88,22 @@ class InteractiveStoryApp {
         // Remove existing message
         this.removeOfflineMessage();
         
-        const uploadSection = document.querySelector('.upload-section');
-        if (!uploadSection) return;
+        const welcomeSection = document.querySelector('.welcome-section');
+        if (!welcomeSection) return;
 
         const offlineMessage = document.createElement('div');
         offlineMessage.id = 'offline-message';
         offlineMessage.innerHTML = `
-            <div style="background: #ffeaa7; border: 1px solid #fdcb6e; border-radius: 8px; padding: 15px; margin-bottom: 20px;">
-                <strong>⚠️ Backend Unavailable</strong><br>
-                The Python server is not accessible. To upload EPUB files, start the backend:
-                <code style="background: #2d3436; color: #ddd; padding: 4px 8px; border-radius: 4px; display: inline-block; margin-top: 8px;">
+            <div style="background: rgba(255, 0, 0, 0.1); border: 1px solid var(--terminal-green-dim); padding: 15px; margin-bottom: 20px; font-family: var(--font-mono);">
+                <strong style="color: var(--terminal-green);">[CONNECTION ERROR]</strong><br>
+                <span style="color: var(--terminal-text);">TERMINAL SERVER OFFLINE. EXECUTE:</span>
+                <code style="background: var(--terminal-bg); color: var(--terminal-green); padding: 4px 8px; border: 1px solid var(--terminal-green-dim); display: inline-block; margin-top: 8px;">
                     python start_backend.py
                 </code>
             </div>
         `;
         
-        uploadSection.insertBefore(offlineMessage, uploadSection.firstChild);
+        welcomeSection.insertBefore(offlineMessage, welcomeSection.firstChild);
     }
 
     removeOfflineMessage() {
@@ -120,72 +111,6 @@ class InteractiveStoryApp {
         message?.remove();
     }
 
-    // ====================================================================
-    // FILE HANDLING
-    // ====================================================================
-
-    handleFileSelect(event) {
-        const file = event.target.files[0];
-        if (file) {
-            this.processEPUBFile(file);
-        }
-        event.target.value = ''; // Reset for re-selection
-    }
-
-    handleDragOver(event) {
-        event.preventDefault();
-        event.currentTarget.classList.add('dragover');
-    }
-
-    handleDragLeave(event) {
-        event.preventDefault();
-        event.currentTarget.classList.remove('dragover');
-    }
-
-    handleDrop(event) {
-        event.preventDefault();
-        event.currentTarget.classList.remove('dragover');
-        
-        const files = event.dataTransfer.files;
-        if (files.length > 0) {
-            this.processEPUBFile(files[0]);
-        }
-    }
-
-    async processEPUBFile(file) {
-        if (this.isLoading) return;
-        
-        if (!this.isBackendAvailable) {
-            this.showErrorModal('Backend Unavailable', 'Please start the Python backend server to process EPUB files.');
-            return;
-        }
-
-        this.isLoading = true;
-        this.showLoadingState('Uploading EPUB file...');
-
-        try {
-            console.log('📤 Processing EPUB:', file.name);
-
-            const result = await this.api.uploadEPUB(file, (progress) => {
-                this.updateLoadingText(`Upload progress: ${progress}%`);
-            });
-
-            this.updateLoadingText('Processing complete, updating library...');
-            
-            console.log('✅ Book processed:', result.book.title);
-            this.hideLoadingState();
-            
-            this.ui.showNotification(`Book "${result.book.title}" imported successfully!`, 'success');
-            await this.loadBookLibrary();
-
-        } catch (error) {
-            console.error('❌ EPUB processing failed:', error);
-            this.hideLoadingState();
-            this.showErrorModal('Import Error', error.message);
-        } finally {
-            this.isLoading = false;
-        }
-    }
 
     // ====================================================================
     // BOOK LIBRARY MANAGEMENT
@@ -207,18 +132,27 @@ class InteractiveStoryApp {
         }
     }
 
+    // Note: indexEPUBs method removed - use CLI: python app.py --index
+
     displayBookLibrary(books) {
         const bookList = document.getElementById('book-list');
         const librarySection = document.getElementById('library-section');
 
         if (!bookList) return;
 
+        // Always show library section
+        librarySection.style.display = 'block';
+        
         if (books.length === 0) {
-            librarySection.style.display = 'none';
+            bookList.innerHTML = `
+                <div style="text-align: center; padding: 2rem; color: var(--terminal-text-dim); font-family: var(--font-mono);">
+                    <p style="color: var(--terminal-green); text-transform: uppercase; margin-bottom: 1rem;">[NO MODULES FOUND]</p>
+                    <p style="font-size: 0.9rem;">PLACE .EPUB FILES IN backend/data/epubs/</p>
+                    <p style="font-size: 0.9rem;">RESTART TERMINAL TO RELOAD DATABASE</p>
+                </div>
+            `;
             return;
         }
-
-        librarySection.style.display = 'block';
         bookList.innerHTML = '';
 
         books.forEach(book => {
@@ -233,14 +167,14 @@ class InteractiveStoryApp {
         bookDiv.addEventListener('click', () => this.loadBook(book.id));
 
         const progressText = book.last_section 
-            ? `Last paragraph: ${book.last_section}` 
-            : 'Not started';
+            ? `LAST: ${book.last_section}` 
+            : 'STATUS: NEW';
 
         bookDiv.innerHTML = `
             <div class="book-title">${this.escapeHtml(book.title)}</div>
             <div class="book-author">by ${this.escapeHtml(book.author)}</div>
             <div class="book-progress">${progressText}</div>
-            <div class="book-stats">${book.total_sections} paragraphs</div>
+            <div class="book-stats">${book.total_sections}</div>
         `;
 
         return bookDiv;
@@ -283,6 +217,12 @@ class InteractiveStoryApp {
 
             this.hideLoadingState();
             this.showGameScreen();
+            
+            // Initialize debug info
+            this.navigationHistory = [];
+            const startingSection = this.gameEngine.currentSection;
+            this.addToNavigationHistory(null, startingSection, null, 'Game started');
+            
             this.updateGameDisplay();
 
         } catch (error) {
@@ -318,23 +258,47 @@ class InteractiveStoryApp {
             
             this.displayStoryText(storyData.text);
             this.displayChoices(storyData.choices);
+            this.updateDebugInfo();
         } catch (error) {
             console.error('Game display update failed:', error);
-            this.showErrorModal('Game Error', 'Failed to update game display');
+            console.error('Error details:', error.stack);
+            this.showErrorModal('Game Error', `Failed to update game display: ${error.message}`);
         }
     }
 
     displayStoryText(text) {
         const storyTextElement = document.getElementById('story-text');
-        if (!storyTextElement || !text) return;
+        if (!storyTextElement) return;
+
+        // Handle empty text explicitly
+        if (text === null || text === undefined) {
+            storyTextElement.innerHTML = '<p><em>Aucun texte disponible</em></p>';
+            return;
+        }
+
+        // If text is empty string, show placeholder
+        if (text.length === 0) {
+            storyTextElement.innerHTML = '<p><em>Section sans texte - passez directement au choix</em></p>';
+            return;
+        }
 
         const formattedText = text
             .split('\n\n')
             .filter(p => p.trim().length > 0)
-            .map(p => `<p>${this.escapeHtml(p.trim())}</p>`)
+            .map(p => {
+                // Preserve single line breaks within paragraphs
+                const paragraphContent = this.escapeHtml(p.trim())
+                    .replace(/\n/g, '<br>');
+                return `<p>${paragraphContent}</p>`;
+            })
             .join('');
 
-        storyTextElement.innerHTML = formattedText;
+        // If after formatting there's no content, show placeholder
+        if (formattedText.length === 0) {
+            storyTextElement.innerHTML = '<p><em>Section sans texte - passez directement au choix</em></p>';
+        } else {
+            storyTextElement.innerHTML = formattedText;
+        }
     }
 
     displayChoices(choices) {
@@ -344,23 +308,118 @@ class InteractiveStoryApp {
         choicesContainer.innerHTML = '';
 
         if (!choices || choices.length === 0) {
-            choicesContainer.innerHTML = '<p class="text-center">End of adventure</p>';
+            choicesContainer.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; color: var(--terminal-green); font-style: italic;">Fin de l\'aventure</div>';
             return;
         }
 
         choices.forEach((choice, index) => {
-            const choiceButton = document.createElement('button');
-            choiceButton.className = 'choice-btn';
-            choiceButton.textContent = choice.text;
-            choiceButton.addEventListener('click', () => this.makeChoice(index));
+            // Create choice item container
+            const choiceItem = document.createElement('div');
+            choiceItem.className = 'choice-item';
             
-            choicesContainer.appendChild(choiceButton);
+            // Check if choice destination is available
+            const isAvailable = choice.isAvailable !== false; // Default to true for backward compatibility
+            
+            if (!isAvailable) {
+                choiceItem.className += ' choice-unavailable';
+            }
+            
+            // Create choice text element
+            const choiceText = document.createElement('div');
+            choiceText.className = 'choice-text';
+            
+            // Improve malformed choice text before displaying
+            const improvedText = this.improveChoiceText(choice.text, choice.destination);
+            choiceText.textContent = improvedText;
+            
+            if (!isAvailable) {
+                choiceText.textContent += ' [SECTION CORROMPUE]';
+            }
+            
+            if (isAvailable) {
+                // Add click handler to the entire item for better UX
+                choiceItem.addEventListener('click', () => this.makeChoice(index));
+                choiceItem.style.cursor = 'pointer';
+            }
+            
+            choiceItem.appendChild(choiceText);
+            choicesContainer.appendChild(choiceItem);
         });
+    }
+
+    /**
+     * Improve malformed choice text by detecting and fixing common parsing issues
+     * @param {string} text - Original choice text
+     * @param {number} destination - Choice destination section
+     * @returns {string} Improved choice text
+     */
+    improveChoiceText(text, destination) {
+        if (!text || typeof text !== 'string') {
+            console.log(`[improveChoiceText] Empty text, returning default for destination ${destination}`);
+            return `Continuer → ${destination}`;
+        }
+
+        console.log(`[improveChoiceText] Processing: "${text}" → ${destination}`);
+
+        // Pattern 1: Fragment like "s au 191. s'il est supérieur,"
+        // This indicates a dice roll condition that was fragmented
+        if (/^s au \d+\. s'il est (supérieur|inférieur|égal)/i.test(text)) {
+            const improved = `Continuer si votre jet de dé est ${text.includes('supérieur') ? 'supérieur' : text.includes('inférieur') ? 'inférieur' : 'égal'} → ${destination}`;
+            console.log(`[improveChoiceText] Pattern 1 matched! Improved to: "${improved}"`);
+            return improved;
+        }
+
+        // Pattern 2: Fragment starting with conditional words
+        if (/^(si |s'il |si vous |si votre)/i.test(text)) {
+            const improved = `Continuer ${text} → ${destination}`;
+            console.log(`[improveChoiceText] Pattern 2 matched! Improved to: "${improved}"`);
+            return improved;
+        }
+
+        // Pattern 3: Fragment ending with incomplete sentence (but not dice rolls)
+        if ((text.endsWith(',') || text.endsWith('.')) && text.length < 20 && !/s au \d+\./i.test(text)) {
+            const improved = `${text.replace(/[,.]$/, '')} → ${destination}`;
+            console.log(`[improveChoiceText] Pattern 3 matched! Improved to: "${improved}"`);
+            return improved;
+        }
+
+        // Pattern 4: Very short fragments (less than 10 characters)
+        if (text.trim().length < 10) {
+            const improved = `Continuer → ${destination}`;
+            console.log(`[improveChoiceText] Pattern 4 matched! Improved to: "${improved}"`);
+            return improved;
+        }
+
+        // Pattern 5: Fragment with incomplete dice reference
+        if (/\d+\.\s*$/.test(text)) {
+            const improved = `${text.replace(/\d+\.\s*$/, '')} → ${destination}`;
+            console.log(`[improveChoiceText] Pattern 5 matched! Improved to: "${improved}"`);
+            return improved;
+        }
+
+        // Return original text if no patterns match
+        console.log(`[improveChoiceText] No patterns matched, returning original: "${text}"`);
+        return text;
     }
 
     async makeChoice(choiceIndex) {
         try {
+            // Get current state before making choice
+            const currentSection = this.gameEngine.currentSection;
+            const storyData = this.gameEngine.continue();
+            const choice = storyData.choices[choiceIndex];
+            
+            // Make the choice
             this.gameEngine.makeChoice(choiceIndex);
+            
+            // Track navigation
+            this.addToNavigationHistory(
+                currentSection, 
+                choice.destination, 
+                choiceIndex, 
+                choice.text.substring(0, 50) + (choice.text.length > 50 ? '...' : '')
+            );
+            
             this.updateGameDisplay();
             
             // Auto-save
@@ -368,7 +427,8 @@ class InteractiveStoryApp {
             
         } catch (error) {
             console.error('Choice handling failed:', error);
-            this.showErrorModal('Game Error', 'Failed to process choice');
+            console.error('Error details:', error.stack);
+            this.showErrorModal('Game Error', `Failed to process choice: ${error.message}`);
         }
     }
 
@@ -388,6 +448,104 @@ class InteractiveStoryApp {
             console.error('Save failed:', error);
             this.ui.showNotification('Save failed', 'error', 3000);
         }
+    }
+
+    async resetGame() {
+        if (!this.currentBook || !this.gameEngine.hasStory()) {
+            return;
+        }
+
+        try {
+            // Confirm reset with user
+            if (!confirm('Are you sure you want to restart the adventure from the beginning? All progress will be lost.')) {
+                return;
+            }
+
+            // Reset the game engine to starting section
+            this.gameEngine.reset();
+            
+            console.log('🔄 Game reset to beginning');
+            this.ui.showNotification('Adventure restarted', 'success', 2000);
+            
+            // Update the display to show the starting section
+            this.updateGameDisplay();
+            
+        } catch (error) {
+            console.error('Reset failed:', error);
+            this.ui.showNotification('Reset failed', 'error', 3000);
+        }
+    }
+
+    toggleDebugPanel() {
+        const debugPanel = document.getElementById('debug-panel');
+        const toggleButton = document.getElementById('toggle-debug');
+        
+        if (!debugPanel || !toggleButton) return;
+        
+        this.debugPanelVisible = !this.debugPanelVisible;
+        
+        if (this.debugPanelVisible) {
+            debugPanel.classList.remove('hidden');
+            toggleButton.textContent = 'HIDE';
+            this.updateDebugInfo();
+        } else {
+            debugPanel.classList.add('hidden');
+            toggleButton.textContent = 'SHOW';
+        }
+    }
+
+    updateDebugInfo() {
+        if (!this.debugPanelVisible || !this.gameEngine.hasStory()) return;
+
+        try {
+            // Current section info
+            const currentSection = this.gameEngine.currentSection;
+            const storyData = this.gameEngine.continue();
+            
+            document.getElementById('debug-current-section').innerHTML = 
+                `Section: <strong>${currentSection}</strong><br>` +
+                `Text length: ${storyData.text.length} chars<br>` +
+                `Choices: ${storyData.choices.length}`;
+
+            // Available choices
+            const choicesHtml = storyData.choices.map((choice, index) => 
+                `<div class="debug-choice">` +
+                `[${index}] "${choice.text}" → ${choice.destination} ` +
+                `${choice.isAvailable ? '✓' : '✗ (missing)'}` +
+                `</div>`
+            ).join('');
+            document.getElementById('debug-choices').innerHTML = choicesHtml || 'No choices available';
+
+            // Navigation history (last 10 items)
+            const historyHtml = this.navigationHistory.slice(-10).map((item, index) => 
+                `<div class="debug-path-item">` +
+                `${item.timestamp} - Section ${item.from} → ${item.to} ` +
+                `(Choice: "${item.choiceText}")` +
+                `</div>`
+            ).join('');
+            document.getElementById('debug-history').innerHTML = historyHtml || 'No navigation history';
+
+        } catch (error) {
+            console.error('Debug update failed:', error);
+        }
+    }
+
+    addToNavigationHistory(fromSection, toSection, choiceIndex, choiceText) {
+        const timestamp = new Date().toLocaleTimeString();
+        this.navigationHistory.push({
+            timestamp,
+            from: fromSection,
+            to: toSection,
+            choiceIndex,
+            choiceText
+        });
+        
+        // Keep only last 50 items
+        if (this.navigationHistory.length > 50) {
+            this.navigationHistory = this.navigationHistory.slice(-50);
+        }
+        
+        this.updateDebugInfo();
     }
 
     // ====================================================================

@@ -7,21 +7,38 @@ import os
 import json
 import uuid
 from datetime import datetime
+# Human review tools removed - using direct markdown workflow
 
 class BookManager:
-    def __init__(self, data_folder):
+    def __init__(self, data_folder, database_folder=None):
         self.data_folder = data_folder
-        self.books_file = os.path.join(data_folder, 'books.json')
-        self.saves_folder = os.path.join(data_folder, 'saves')
-        self.ink_folder = os.path.join(data_folder, 'ink_scripts')
+        
+        # Separate database and working files
+        if database_folder is None:
+            database_folder = os.path.join(os.path.dirname(data_folder), 'database')
+        self.database_folder = database_folder
+        
+        # Database files (sensitive data)
+        self.books_file = os.path.join(database_folder, 'books.json')
+        self.saves_folder = os.path.join(database_folder, 'saves')
+        self.ink_folder = os.path.join(database_folder, 'ink_scripts')
+        
+        # Working files (non-sensitive)
+        self.review_folder = os.path.join(data_folder, 'reviews')
         
         # Ensure directories exist
+        os.makedirs(database_folder, exist_ok=True)
         os.makedirs(self.saves_folder, exist_ok=True)
         os.makedirs(self.ink_folder, exist_ok=True)
+        os.makedirs(self.review_folder, exist_ok=True)
+        
+        # Human review tools removed - using direct markdown workflow
         
         # Initialize books index if it doesn't exist
         if not os.path.exists(self.books_file):
             self._save_books_index({})
+
+# Removed old EPUB parsing stats - no longer needed with MD workflow
     
     def save_book(self, book_data, ink_script):
         """
@@ -52,12 +69,15 @@ class BookManager:
             'last_section': None
         }
         
+        # Add parsing method (now always human-reviewed from MD files)
+        book_entry['parsing_method'] = book_data.get('parsing_method', 'human_reviewed_markdown')
+        
         # Save book metadata to index
         books_index[book_id] = book_entry
         self._save_books_index(books_index)
         
         # Save full book data
-        book_file = os.path.join(self.data_folder, f'book_{book_id}.json')
+        book_file = os.path.join(self.database_folder, f'book_{book_id}.json')
         with open(book_file, 'w', encoding='utf-8') as f:
             json.dump(book_data, f, ensure_ascii=False, indent=2)
         
@@ -90,7 +110,7 @@ class BookManager:
             return None
         
         # Load full book data
-        book_file = os.path.join(self.data_folder, f'book_{book_id}.json')
+        book_file = os.path.join(self.database_folder, f'book_{book_id}.json')
         
         if not os.path.exists(book_file):
             return None
@@ -147,7 +167,7 @@ class BookManager:
             self._save_books_index(books_index)
             
             # Delete book data file
-            book_file = os.path.join(self.data_folder, f'book_{book_id}.json')
+            book_file = os.path.join(self.database_folder, f'book_{book_id}.json')
             if os.path.exists(book_file):
                 os.remove(book_file)
             
@@ -256,7 +276,24 @@ class BookManager:
         """Load books index from file"""
         try:
             with open(self.books_file, 'r', encoding='utf-8') as f:
-                return json.load(f)
+                data = json.load(f)
+                
+                # Handle legacy format with "books" array
+                if isinstance(data, dict) and "books" in data:
+                    # Convert to new format: extract individual book entries
+                    books_index = {}
+                    
+                    # Add individual book entries (they're the proper format)
+                    for key, value in data.items():
+                        if key != "books" and isinstance(value, dict) and "id" in value:
+                            books_index[key] = value
+                    
+                    # Save in the new format
+                    self._save_books_index(books_index)
+                    return books_index
+                
+                # Already in correct format
+                return data
         except Exception:
             return {}
     
@@ -299,3 +336,246 @@ class BookManager:
                 'storage_used_bytes': 0,
                 'storage_used_mb': 0
             }
+    
+    def clean_database(self, confirm=False):
+        """
+        Clean database by removing all books, saves, and ink scripts
+        
+        Args:
+            confirm (bool): Safety confirmation required
+            
+        Returns:
+            dict: Cleanup statistics
+        """
+        if not confirm:
+            raise ValueError("Database cleanup requires explicit confirmation")
+        
+        stats = {
+            'books_deleted': 0,
+            'saves_deleted': 0,
+            'ink_scripts_deleted': 0,
+            'data_files_deleted': 0,
+            'errors': []
+        }
+        
+        try:
+            # Get current stats before cleanup
+            books_index = self._load_books_index()
+            initial_books = len(books_index)
+            
+            # Delete all books (this will cascade to saves and ink scripts)
+            for book_id in list(books_index.keys()):
+                try:
+                    if self.delete_book(book_id):
+                        stats['books_deleted'] += 1
+                    else:
+                        stats['errors'].append(f"Failed to delete book: {book_id}")
+                except Exception as e:
+                    stats['errors'].append(f"Error deleting book {book_id}: {e}")
+            
+            # Clean up any remaining orphaned files
+            stats['saves_deleted'] = self._clean_orphaned_saves()
+            stats['ink_scripts_deleted'] = self._clean_orphaned_ink_scripts()
+            stats['data_files_deleted'] = self._clean_orphaned_data_files()
+            
+            # Reset books index
+            self._save_books_index({})
+            
+            print(f"Database cleanup completed:")
+            print(f"  - Books deleted: {stats['books_deleted']}")
+            print(f"  - Saves deleted: {stats['saves_deleted']}")  
+            print(f"  - Ink scripts deleted: {stats['ink_scripts_deleted']}")
+            print(f"  - Data files deleted: {stats['data_files_deleted']}")
+            if stats['errors']:
+                print(f"  - Errors: {len(stats['errors'])}")
+            
+            return stats
+            
+        except Exception as e:
+            stats['errors'].append(f"Cleanup failed: {e}")
+            print(f"Error during database cleanup: {e}")
+            return stats
+    
+    def _clean_orphaned_saves(self):
+        """Clean orphaned save files"""
+        deleted = 0
+        try:
+            if os.path.exists(self.saves_folder):
+                for filename in os.listdir(self.saves_folder):
+                    if filename.endswith('.json'):
+                        file_path = os.path.join(self.saves_folder, filename)
+                        os.remove(file_path)
+                        deleted += 1
+        except Exception as e:
+            print(f"Error cleaning saves: {e}")
+        return deleted
+    
+    def _clean_orphaned_ink_scripts(self):
+        """Clean orphaned ink script files"""
+        deleted = 0
+        try:
+            if os.path.exists(self.ink_folder):
+                for filename in os.listdir(self.ink_folder):
+                    if filename.endswith('.ink'):
+                        file_path = os.path.join(self.ink_folder, filename)
+                        os.remove(file_path)
+                        deleted += 1
+        except Exception as e:
+            print(f"Error cleaning ink scripts: {e}")
+        return deleted
+    
+    def _clean_orphaned_data_files(self):
+        """Clean orphaned book data files"""
+        deleted = 0
+        try:
+            for filename in os.listdir(self.database_folder):
+                if filename.startswith('book_') and filename.endswith('.json'):
+                    file_path = os.path.join(self.database_folder, filename)
+                    os.remove(file_path)
+                    deleted += 1
+        except Exception as e:
+            print(f"Error cleaning data files: {e}")
+        return deleted
+    
+    def verify_database_integrity(self):
+        """
+        Verify database integrity and report issues
+        
+        Returns:
+            dict: Integrity report
+        """
+        report = {
+            'total_books': 0,
+            'valid_books': 0,
+            'missing_data_files': [],
+            'missing_ink_scripts': [],
+            'orphaned_saves': [],
+            'orphaned_ink_scripts': [],
+            'orphaned_data_files': [],
+            'corrupted_books': []
+        }
+        
+        try:
+            books_index = self._load_books_index()
+            report['total_books'] = len(books_index)
+            
+            # Check each book in index
+            for book_id, book_meta in books_index.items():
+                # Check book data file exists
+                book_file = os.path.join(self.database_folder, f'book_{book_id}.json')
+                if not os.path.exists(book_file):
+                    report['missing_data_files'].append(book_id)
+                    continue
+                    
+                # Check ink script exists
+                ink_file = os.path.join(self.ink_folder, f'{book_id}.ink')
+                if not os.path.exists(ink_file):
+                    report['missing_ink_scripts'].append(book_id)
+                
+                # Try to load book data
+                try:
+                    book_data = self.get_book(book_id)
+                    if book_data:
+                        report['valid_books'] += 1
+                    else:
+                        report['corrupted_books'].append(book_id)
+                except Exception as e:
+                    report['corrupted_books'].append(f"{book_id}: {e}")
+            
+            # Check for orphaned files
+            report['orphaned_saves'] = self._find_orphaned_saves(books_index)
+            report['orphaned_ink_scripts'] = self._find_orphaned_ink_scripts(books_index)
+            report['orphaned_data_files'] = self._find_orphaned_data_files(books_index)
+            
+            return report
+            
+        except Exception as e:
+            report['errors'] = [f"Integrity check failed: {e}"]
+            return report
+    
+    def _find_orphaned_saves(self, books_index):
+        """Find save files without corresponding books"""
+        orphaned = []
+        try:
+            if os.path.exists(self.saves_folder):
+                for filename in os.listdir(self.saves_folder):
+                    if filename.endswith('.json'):
+                        book_id = filename[:-5]  # Remove .json extension
+                        if book_id not in books_index:
+                            orphaned.append(filename)
+        except Exception:
+            pass
+        return orphaned
+    
+    def _find_orphaned_ink_scripts(self, books_index):
+        """Find ink script files without corresponding books"""
+        orphaned = []
+        try:
+            if os.path.exists(self.ink_folder):
+                for filename in os.listdir(self.ink_folder):
+                    if filename.endswith('.ink'):
+                        book_id = filename[:-4]  # Remove .ink extension
+                        if book_id not in books_index:
+                            orphaned.append(filename)
+        except Exception:
+            pass
+        return orphaned
+    
+    def _find_orphaned_data_files(self, books_index):
+        """Find book data files without corresponding index entries"""
+        orphaned = []
+        try:
+            for filename in os.listdir(self.data_folder):
+                if filename.startswith('book_') and filename.endswith('.json'):
+                    book_id = filename[5:-5]  # Remove book_ prefix and .json suffix
+                    if book_id not in books_index:
+                        orphaned.append(filename)
+        except Exception:
+            pass
+        return orphaned
+    
+    def generate_human_review(self, parsed_data, book_id):
+        """
+        Generate a human review file for parsed EPUB data
+        
+        Args:
+            parsed_data (dict): Parsed story data from EPUB
+            book_id (str): Book identifier
+            
+        Returns:
+            str: Path to generated review file
+        """
+        review_file = os.path.join(self.review_folder, f'{book_id}_review.md')
+        return self.review_generator.generate_review_file(parsed_data, review_file)
+    
+    def load_corrected_review(self, book_id):
+        """
+        Load and validate human-corrected review file
+        
+        Args:
+            book_id (str): Book identifier
+            
+        Returns:
+            tuple: (story_data, validation_report) or (None, error_message)
+        """
+        review_file = os.path.join(self.review_folder, f'{book_id}_review.md')
+        
+        if not os.path.exists(review_file):
+            return None, f"Review file not found: {review_file}"
+        
+        try:
+            # Parse the corrected file
+            story_data = self.review_generator.parse_corrected_file(review_file)
+            
+            # Validate the corrected data
+            is_valid = self.review_validator.validate_story(story_data)
+            validation_report = self.review_validator.get_validation_report()
+            
+            return story_data, validation_report
+            
+        except Exception as e:
+            return None, f"Error processing review file: {e}"
+    
+    def get_review_file_path(self, book_id):
+        """Get the path to a book's review file"""
+        return os.path.join(self.review_folder, f'{book_id}_review.md')

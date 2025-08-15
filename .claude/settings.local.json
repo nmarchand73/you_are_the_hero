@@ -7,13 +7,22 @@
       "Bash(pip install:*)",
       "Bash(python:*)",
       "Bash(start test_inkjs.html)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(true)",
+      "WebFetch(domain:wonderful-ocean-0b873b810.3.azurestaticapps.net)",
+      "Bash(curl:*)",
+      "Bash(grep:*)",
+      "Bash(start http://localhost:5000)",
+      "Bash(cp:*)",
+      "Bash(taskkill:*)",
+      "Bash(timeout:*)"
     ],
     "deny": [],
     "ask": [],
     "defaultMode": "acceptEdits",
     "additionalDirectories": [
-      "C:\\c\\DATA\\DEV\\PROJETS"
+      "C:\\c\\DATA\\DEV\\PROJETS",
+      "C:\\c\\DATA\\DEV\\PROJETS\\you_are_the_hero"
     ]
   }
 }

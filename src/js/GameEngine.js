@@ -1,60 +1,41 @@
 /**
- * GameEngine - Handles inkjs story management and game state
+ * GameEngine - Handles simple JSON story management and game state
  */
 
 export class GameEngine {
     constructor() {
-        this.story = null;
-        this.inkjs = null;
+        this.storyData = null;
+        this.currentSection = null;
+        this.gameVariables = {
+            current_section: 1,
+            player_health: 20,
+            player_skill: 10,
+            player_luck: 10
+        };
     }
 
     /**
-     * Load inkjs library dynamically
-     * @returns {Promise<Object>} inkjs library
+     * Load story from JSON data
+     * @param {string} storyJson - JSON story data
      */
-    async loadInkJS() {
-        if (this.inkjs) {
-            return this.inkjs;
-        }
-
-        // Try to load from window (if already loaded)
-        if (window.inkjs) {
-            this.inkjs = window.inkjs;
-            return this.inkjs;
-        }
-
-        // Load from CDN
-        const script = document.createElement('script');
-        script.src = 'https://cdn.jsdelivr.net/npm/inkjs@2.2.3/dist/ink.min.js';
-        
-        return new Promise((resolve, reject) => {
-            script.onload = () => {
-                if (window.inkjs) {
-                    this.inkjs = window.inkjs;
-                    resolve(this.inkjs);
-                } else {
-                    reject(new Error('Failed to load inkjs library'));
-                }
-            };
-            script.onerror = () => reject(new Error('Failed to load inkjs library'));
-            document.head.appendChild(script);
-        });
-    }
-
-    /**
-     * Load story from ink script
-     * @param {string} inkScript - Compiled ink script
-     */
-    async loadStory(inkScript) {
+    async loadStory(storyJson) {
         try {
-            // Load inkjs if not already loaded
-            const inkjs = await this.loadInkJS();
-
-            // Create story instance
-            this.story = new inkjs.Story(inkScript);
+            // Parse the JSON story data
+            this.storyData = JSON.parse(storyJson);
+            
+            // Validate story structure
+            if (!this.storyData.sections || this.storyData.startingSection === undefined || this.storyData.startingSection === null) {
+                throw new Error('Invalid story format: missing sections or startingSection');
+            }
+            
+            // Initialize to starting section
+            this.currentSection = String(this.storyData.startingSection);
+            this.gameVariables.current_section = this.storyData.startingSection;
             
             console.log('Story loaded successfully');
-            console.log('Global variables:', this.story.variablesState._globalVariables);
+            console.log('Title:', this.storyData.title);
+            console.log('Author:', this.storyData.author);
+            console.log('Sections:', Object.keys(this.storyData.sections).length);
             
         } catch (error) {
             console.error('Error loading story:', error);
@@ -72,31 +53,33 @@ export class GameEngine {
         }
 
         try {
-            let text = '';
+            const section = this.storyData.sections[this.currentSection];
             
-            // Continue reading until we hit choices or the end
-            while (this.story.canContinue) {
-                const line = this.story.Continue();
-                if (line && line.trim()) {
-                    text += line;
-                }
+            if (!section) {
+                throw new Error(`Section ${this.currentSection} not found`);
             }
 
-            // Get available choices
-            const choices = this.story.currentChoices.map(choice => ({
-                text: choice.text,
-                index: choice.index
-            }));
+            // Get current section text
+            const text = section.text || '';
 
-            // Get current variables/state
-            const variables = this.getCurrentVariables();
+            // Get available choices, mapped to our format, only include available destinations
+            const allChoices = (section.choices || []).map((choice, index) => ({
+                text: choice.text,
+                index: index,
+                destination: choice.destination,
+                isAvailable: !!this.storyData.sections[String(choice.destination)]
+            }));
+            
+            // Include all choices (available and unavailable) for display
+            const choices = allChoices;
 
             return {
                 text: text.trim(),
                 choices: choices,
-                canContinue: this.story.canContinue,
-                variables: variables,
-                currentTags: this.story.currentTags || []
+                canContinue: false, // We don't use continuous text like ink
+                variables: this.getCurrentVariables(),
+                currentTags: [],
+                isEnd: section.isEnd || choices.length === 0
             };
 
         } catch (error) {
@@ -114,13 +97,26 @@ export class GameEngine {
             throw new Error('No story loaded');
         }
 
-        if (!this.story.currentChoices || choiceIndex >= this.story.currentChoices.length) {
+        const section = this.storyData.sections[this.currentSection];
+        if (!section || !section.choices || choiceIndex >= section.choices.length) {
             throw new Error('Invalid choice index');
         }
 
         try {
-            this.story.ChooseChoiceIndex(choiceIndex);
-            console.log(`Made choice ${choiceIndex}: ${this.story.currentChoices[choiceIndex]?.text}`);
+            const choice = section.choices[choiceIndex];
+            const destinationSection = String(choice.destination);
+            
+            // Check if destination section exists
+            if (!this.storyData.sections[destinationSection]) {
+                throw new Error(`Destination section ${destinationSection} not found (corrupted or missing file)`);
+            }
+            
+            // Move to the new section
+            this.currentSection = destinationSection;
+            this.gameVariables.current_section = choice.destination;
+            
+            console.log(`Made choice ${choiceIndex}: ${choice.text}`);
+            console.log(`Moving to section: ${destinationSection}`);
             
         } catch (error) {
             console.error('Error making choice:', error);
@@ -137,33 +133,7 @@ export class GameEngine {
             return {};
         }
 
-        try {
-            const variables = {};
-            
-            // Common game variables we want to track
-            const commonVars = [
-                'current_section',
-                'player_health', 
-                'player_skill',
-                'player_luck'
-            ];
-
-            for (const varName of commonVars) {
-                try {
-                    const value = this.story.variablesState[varName];
-                    if (value !== undefined) {
-                        variables[varName] = value;
-                    }
-                } catch (e) {
-                    // Variable doesn't exist - that's ok
-                }
-            }
-
-            return variables;
-        } catch (error) {
-            console.warn('Error getting variables:', error);
-            return {};
-        }
+        return { ...this.gameVariables };
     }
 
     /**
@@ -177,7 +147,7 @@ export class GameEngine {
         }
 
         try {
-            this.story.variablesState[name] = value;
+            this.gameVariables[name] = value;
             console.log(`Set variable ${name} = ${value}`);
         } catch (error) {
             console.error(`Error setting variable ${name}:`, error);
@@ -195,7 +165,7 @@ export class GameEngine {
 
         try {
             const state = {
-                storyState: this.story.state.toJson(),
+                currentSection: this.currentSection,
                 variables: this.getCurrentVariables(),
                 timestamp: new Date().toISOString()
             };
@@ -216,14 +186,18 @@ export class GameEngine {
             throw new Error('No story loaded');
         }
 
-        if (!saveData || !saveData.storyState) {
+        if (!saveData || !saveData.currentSection) {
             console.warn('No valid save data to load');
             return;
         }
 
         try {
-            this.story.state.LoadJson(saveData.storyState);
+            this.currentSection = String(saveData.currentSection);
+            if (saveData.variables) {
+                this.gameVariables = { ...this.gameVariables, ...saveData.variables };
+            }
             console.log('Story state loaded successfully');
+            console.log('Current section:', this.currentSection);
             console.log('Loaded variables:', saveData.variables);
             
         } catch (error) {
@@ -238,7 +212,13 @@ export class GameEngine {
     reset() {
         if (this.hasStory()) {
             try {
-                this.story.ResetState();
+                this.currentSection = String(this.storyData.startingSection);
+                this.gameVariables = {
+                    current_section: this.storyData.startingSection,
+                    player_health: 20,
+                    player_skill: 10,
+                    player_luck: 10
+                };
                 console.log('Story reset to beginning');
             } catch (error) {
                 console.error('Error resetting story:', error);
@@ -251,7 +231,7 @@ export class GameEngine {
      * @returns {boolean} True if story is loaded
      */
     hasStory() {
-        return this.story !== null;
+        return this.storyData !== null && this.currentSection !== null;
     }
 
     /**
@@ -263,8 +243,8 @@ export class GameEngine {
             return true;
         }
         
-        return !this.story.canContinue && 
-               (!this.story.currentChoices || this.story.currentChoices.length === 0);
+        const section = this.storyData.sections[this.currentSection];
+        return !section || section.isEnd || (section.choices && section.choices.length === 0);
     }
 
     /**
@@ -277,42 +257,64 @@ export class GameEngine {
         }
 
         const variables = this.getCurrentVariables();
+        const section = this.storyData.sections[this.currentSection];
         
         return {
-            currentSection: variables.current_section || 'unknown',
+            currentSection: this.currentSection,
             playerHealth: variables.player_health || 0,
             playerSkill: variables.player_skill || 0,
             playerLuck: variables.player_luck || 0,
             hasEnded: this.hasEnded(),
-            canContinue: this.story.canContinue,
-            choicesAvailable: this.story.currentChoices ? this.story.currentChoices.length : 0
+            canContinue: false, // We don't use continuous text
+            choicesAvailable: section ? (section.choices || []).length : 0,
+            totalSections: Object.keys(this.storyData.sections).length
         };
     }
 
     /**
-     * Validate ink script before loading
-     * @param {string} inkScript - Ink script to validate
+     * Validate story JSON before loading
+     * @param {string} storyJson - Story JSON to validate
      * @returns {Object} Validation result
      */
-    static validateInkScript(inkScript) {
+    static validateStoryJson(storyJson) {
         const errors = [];
         const warnings = [];
 
         // Basic validation
-        if (!inkScript || typeof inkScript !== 'string') {
-            errors.push('Invalid ink script: must be a non-empty string');
+        if (!storyJson || typeof storyJson !== 'string') {
+            errors.push('Invalid story data: must be a non-empty string');
             return { isValid: false, errors, warnings };
         }
 
-        // Check for required elements
-        if (!inkScript.includes('-> section_1')) {
-            warnings.push('No starting section found (expected "-> section_1")');
-        }
+        try {
+            const storyData = JSON.parse(storyJson);
+            
+            // Check required fields
+            if (!storyData.sections) {
+                errors.push('Missing sections object');
+            }
+            if (storyData.startingSection === undefined || storyData.startingSection === null) {
+                errors.push('Missing startingSection');
+            }
+            if (!storyData.title) {
+                warnings.push('Missing title');
+            }
+            
+            // Check sections structure
+            if (storyData.sections) {
+                const sectionCount = Object.keys(storyData.sections).length;
+                if (sectionCount === 0) {
+                    errors.push('No sections found');
+                }
+                
+                const startingSection = String(storyData.startingSection);
+                if (!storyData.sections[startingSection]) {
+                    errors.push('Starting section not found in sections');
+                }
+            }
 
-        // Check for basic ink syntax
-        const hasKnots = /=== \w+ ===/.test(inkScript);
-        if (!hasKnots) {
-            errors.push('No knots found - invalid ink script structure');
+        } catch (parseError) {
+            errors.push(`Invalid JSON format: ${parseError.message}`);
         }
 
         return {
