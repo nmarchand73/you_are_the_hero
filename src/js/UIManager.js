@@ -5,7 +5,7 @@
 export class UIManager {
     constructor() {
         this.isInitialized = false;
-        this.currentTheme = 'light';
+        this.currentTheme = 'modern'; // Changed default to modern
         this.animations = {
             fadeIn: 'fadeIn 0.3s ease-in',
             slideIn: 'slideIn 0.3s ease-out',
@@ -35,8 +35,11 @@ export class UIManager {
      */
     setupTheme() {
         // Load saved theme
-        const savedTheme = localStorage.getItem('theme') || 'light';
+        const savedTheme = localStorage.getItem('theme') || 'modern';
         this.setTheme(savedTheme);
+
+        // Setup theme switcher
+        this.setupThemeSwitcher();
 
         // Listen for system theme changes
         if (window.matchMedia) {
@@ -44,30 +47,66 @@ export class UIManager {
             
             mediaQuery.addEventListener('change', (e) => {
                 if (!localStorage.getItem('theme')) {
-                    this.setTheme(e.matches ? 'dark' : 'light');
+                    this.setTheme(e.matches ? 'modern' : 'terminal');
                 }
             });
         }
     }
 
     /**
+     * Setup theme switcher buttons
+     */
+    setupThemeSwitcher() {
+        const themeButtons = document.querySelectorAll('.theme-btn');
+        
+        themeButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                const theme = button.getAttribute('data-theme');
+                this.setTheme(theme);
+                this.updateThemeSwitcher(theme);
+            });
+        });
+        
+        this.updateThemeSwitcher(this.currentTheme);
+    }
+
+    /**
+     * Update theme switcher button states
+     */
+    updateThemeSwitcher(activeTheme) {
+        const themeButtons = document.querySelectorAll('.theme-btn');
+        
+        themeButtons.forEach(button => {
+            const theme = button.getAttribute('data-theme');
+            if (theme === activeTheme) {
+                button.classList.add('active');
+            } else {
+                button.classList.remove('active');
+            }
+        });
+    }
+
+    /**
      * Set theme
-     * @param {string} theme - Theme name ('light' or 'dark')
+     * @param {string} theme - Theme name ('terminal', 'modern', 'light', 'dark')
      */
     setTheme(theme) {
         this.currentTheme = theme;
         document.documentElement.setAttribute('data-theme', theme);
         localStorage.setItem('theme', theme);
         
-        // Update theme toggle buttons
+        // Update theme switcher
+        this.updateThemeSwitcher(theme);
+        
+        // Update theme toggle buttons (for backward compatibility)
         this.updateThemeButtons();
     }
 
     /**
-     * Toggle between light and dark themes
+     * Toggle between terminal and modern themes
      */
     toggleTheme() {
-        const newTheme = this.currentTheme === 'light' ? 'dark' : 'light';
+        const newTheme = this.currentTheme === 'terminal' ? 'modern' : 'terminal';
         this.setTheme(newTheme);
     }
 
@@ -76,12 +115,12 @@ export class UIManager {
      */
     updateThemeButtons() {
         const themeButtons = document.querySelectorAll('.theme-toggle');
-        const icon = this.currentTheme === 'light' ? '🌙' : '☀️';
+        const icon = this.currentTheme === 'terminal' ? '✨' : '🖥️';
         
         themeButtons.forEach(button => {
             button.textContent = icon;
             button.setAttribute('aria-label', 
-                `Switch to ${this.currentTheme === 'light' ? 'dark' : 'light'} mode`
+                `Switch to ${this.currentTheme === 'terminal' ? 'modern' : 'terminal'} mode`
             );
         });
     }

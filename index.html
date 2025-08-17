@@ -5,8 +5,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TERMINAL STORY SYSTEM v1.0</title>
     <link rel="stylesheet" href="src/css/styles.css">
+    <!-- Google Fonts for modern theme -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 </head>
 <body>
+    <!-- Theme Switcher -->
+    <div class="theme-switcher">
+        <button id="theme-modern" class="theme-btn active" data-theme="modern">
+            <span>✨</span> Modern
+        </button>
+        <button id="theme-terminal" class="theme-btn" data-theme="terminal">
+            <span>🖥️</span> Green
+        </button>
+        <button id="theme-amber" class="theme-btn" data-theme="amber">
+            <span>📺</span> Orange
+        </button>
+    </div>
+    
     <div id="app">
         <!-- Home Screen -->
         <div id="home-screen" class="screen active">

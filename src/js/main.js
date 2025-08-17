@@ -282,14 +282,16 @@ class InteractiveStoryApp {
             return;
         }
 
-        const formattedText = text
+        const paragraphs = text
             .split('\n\n')
-            .filter(p => p.trim().length > 0)
-            .map(p => {
+            .filter(p => p.trim().length > 0);
+
+        const formattedText = paragraphs
+            .map((p, index) => {
                 // Preserve single line breaks within paragraphs
                 const paragraphContent = this.escapeHtml(p.trim())
                     .replace(/\n/g, '<br>');
-                return `<p>${paragraphContent}</p>`;
+                return `<p style="--paragraph-index: ${index}; --line-index: ${index};">${paragraphContent}</p>`;
             })
             .join('');
 
@@ -298,6 +300,8 @@ class InteractiveStoryApp {
             storyTextElement.innerHTML = '<p><em>Section sans texte - passez directement au choix</em></p>';
         } else {
             storyTextElement.innerHTML = formattedText;
+            
+                    // Terminal theme effects are handled by CSS
         }
     }
 
@@ -346,6 +350,8 @@ class InteractiveStoryApp {
             choicesContainer.appendChild(choiceItem);
         });
     }
+
+
 
     /**
      * Improve malformed choice text by detecting and fixing common parsing issues
